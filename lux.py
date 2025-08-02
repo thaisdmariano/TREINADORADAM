@@ -137,7 +137,7 @@ menu = st.sidebar.radio("Navegação", [
 ])
 
 # --------------------------------------------------
-# Aba Mães
+# Aba Mães INSEPARIZADAS
 # --------------------------------------------------
 if menu == "Mães":
     st.header("Mães Cadastradas")
@@ -326,7 +326,7 @@ elif menu == "Processar Texto":
                     st.warning("Não há blocos pendentes de saída.")
 
 # --------------------------------------------------
-# Aba Blocos
+# Aba Blocos da Tecnologia INSEPA by Lux Burnns
 # --------------------------------------------------
 elif menu == "Blocos":
     st.header("Gerenciar Blocos")
@@ -379,9 +379,10 @@ elif menu == "Blocos":
                 st.error("Formato inválido")
 
 st.sidebar.markdown("---")
-st.sidebar.write("❤️ Desenvolvido com Streamlit")
+st.sidebar.write("❤️ Desenvolvido por Lux Burnns & Cia")
 
 # --------------------------------------------------
 # Persistir JSONs a cada rerun
 save_json(SUB_FILE,  subcon)
 save_json(INC_FILE, inconsc)
+
