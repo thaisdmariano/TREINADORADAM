@@ -142,7 +142,8 @@ def add_saida_to_block(data, mae_id, bloco, last_idx, seg, re_sai, ctx_sai):
 
 # ————— INSEPA tokenização para Inconsciente —————
 def insepa_tokenizar_texto(text_id, texto):
-    units  = re.findall(r'\S+', texto, re.UNICODE)
+    # cada palavra e cada sequência de pontuação vira 1 token
+    units  = re.findall(r'\w+|[^\w\s]+', texto, re.UNICODE)
     tokens = [f"{text_id}.{i+1}" for i in range(len(units))]
     alnulu = calcular_alnulu(texto)
     ultimo = tokens[-1] if tokens else ""
@@ -160,10 +161,10 @@ st.set_page_config(page_title="Subconscious Manager")
 st.title("🧠 Subconscious Manager")
 
 # Carrega dados
-subcon = load_json(SUB_FILE,
-                   {"maes": {"0": {"nome": "Interações",
-                                   "ultimo_child": "0.0",
-                                   "blocos": []}}})
+subcon = load_json(
+    SUB_FILE,
+    {"maes": {"0": {"nome": "Interações", "ultimo_child": "0.0", "blocos": []}}}
+)
 subcon["maes"] = reindex_maes(subcon["maes"])
 inconsc = load_json(INC_FILE, [])
 
@@ -217,11 +218,8 @@ if menu == "Mães":
             sorted(subcon["maes"].keys(), key=int),
             format_func=lambda x: f"{x} - {subcon['maes'][x]['nome']}"
         )
-        novo_nome = st.text_input(
-            "Novo nome",
-            subcon["maes"][escolha_e]["nome"]
-        )
-        editar = st.form_submit_button("Atualizar Nome")
+        novo_nome = st.text_input("Novo nome", subcon["maes"][escolha_e]["nome"])
+        editar    = st.form_submit_button("Atualizar Nome")
     if editar and novo_nome.strip():
         subcon["maes"][escolha_e]["nome"] = novo_nome.strip()
         save_json(SUB_FILE, subcon)
@@ -249,7 +247,6 @@ elif menu == "Inconsciente":
     else:
         st.info("Nenhum texto no inconsciente.")
 
-    st.subheader("Adicionar Texto")
     with st.form("add_texto"):
         novo      = st.text_area("Inserir novo texto", height=200)
         txt_files = st.file_uploader(
@@ -277,37 +274,36 @@ elif menu == "Inconsciente":
         else:
             st.warning("Nada para adicionar.")
 
-    if inconsc:
-        with st.form("edit_texto"):
-            idx      = st.number_input(
-                "ID do texto a editar",
-                min_value=1,
-                max_value=len(inconsc),
-                value=1
-            )
-            old      = inconsc[idx-1]["texto"]
-            upd      = st.text_area("Novo conteúdo", old, height=200)
-            edit_btn = st.form_submit_button("Editar Texto")
-        if edit_btn:
-            inconsc[idx-1] = insepa_tokenizar_texto(str(idx), upd)
-            save_json(INC_FILE, inconsc)
-            st.success(f"Texto #{idx} re-tokenizado e atualizado")
+    with st.form("edit_texto"):
+        idx      = st.number_input(
+            "ID do texto a editar",
+            min_value=1,
+            max_value=len(inconsc),
+            value=1
+        )
+        old      = inconsc[idx-1]["texto"]
+        upd      = st.text_area("Novo conteúdo", old, height=200)
+        edit_btn = st.form_submit_button("Editar Texto")
+    if edit_btn:
+        inconsc[idx-1] = insepa_tokenizar_texto(str(idx), upd)
+        save_json(INC_FILE, inconsc)
+        st.success(f"Texto #{idx} re-tokenizado e atualizado")
 
-        with st.form("remove_texto"):
-            rid     = st.number_input(
-                "ID do texto a remover",
-                min_value=1,
-                max_value=len(inconsc),
-                value=1
-            )
-            rem_btn = st.form_submit_button("Remover Texto")
-        if rem_btn:
-            removed = inconsc.pop(rid-1)
-            for i, e in enumerate(inconsc, 1):
-                inconsc[i-1] = insepa_tokenizar_texto(str(i), e["texto"])
-            save_json(INC_FILE, inconsc)
-            st.success(f"Texto removido: {removed['nome']}")
-    else:
+    with st.form("remove_texto"):
+        rid     = st.number_input(
+            "ID do texto a remover",
+            min_value=1,
+            max_value=len(inconsc),
+            value=1
+        )
+        rem_btn = st.form_submit_button("Remover Texto")
+    if rem_btn:
+        removed = inconsc.pop(rid-1)
+        for i, e in enumerate(inconsc, 1):
+            inconsc[i-1] = insepa_tokenizar_texto(str(i), e["texto"])
+        save_json(INC_FILE, inconsc)
+        st.success(f"Texto removido: {removed['nome']}")
+    if not inconsc:
         st.info("Sem textos para editar ou remover nesta seção.")
 
 # ----------------------------------------
@@ -324,7 +320,7 @@ elif menu == "Processar Texto":
     )
 
     opt = ["Último salvo"] + [
-        f"{i+1}. {t['texto'][:30]}{'...' if len(t['texto'])>30 else ''}"
+        f"{i+1}. {t['texto'][:30]}{'...' if len(t['texto']) > 30 else ''}"
         for i, t in enumerate(inconsc)
     ]
     escolha = st.selectbox("Selecione texto", opt)
@@ -405,8 +401,7 @@ elif menu == "Blocos":
     else:
         for b in blocos:
             st.write(
-                f"#{b['bloco_id']} → ENTRADA: {b['entrada']['texto']} | "
-                f"SAÍDA: {b['saida'].get('texto', '')}"
+                f"#{b['bloco_id']} → ENTRADA: {b['entrada']['texto']} | SAÍDA: {b['saida'].get('texto','')}"
             )
 
         bid   = st.number_input("ID do bloco para editar",
