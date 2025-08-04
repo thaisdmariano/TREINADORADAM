@@ -78,16 +78,18 @@ def create_entrada_block(data, mae_id, texto, re_ent, ctx_ent):
     aln_ent = calcular_alnulu(texto)
     last0   = get_last_index(mae)
 
-    # tokenização by INSEPA: cada sequência não-branco é um token
-    e_units  = re.findall(r'\S+', texto,   re.UNICODE)
-    re_units = re.findall(r'\S+', re_ent,  re.UNICODE)
-    ce_units = re.findall(r'\S+', ctx_ent, re.UNICODE)
+    # tokenização: palavras e cada sequência de pontuação vira um token
+    e_units  = re.findall(r'\w+|[^\w\s]+', texto,   re.UNICODE)
+    re_units = [re_ent] if re_ent else []               # 1 token único para o emoji/texto
+    ce_units = re.findall(r'\w+|[^\w\s]+', ctx_ent, re.UNICODE)
 
-    toks, _  = generate_tokens(mae_id,
-                               last0 + 1,
-                               len(e_units),
-                               len(re_units),
-                               len(ce_units))
+    toks, _  = generate_tokens(
+        mae_id,
+        last0 + 1,
+        len(e_units),
+        len(re_units),
+        len(ce_units)
+    )
     fim_ent = toks["TOTAL"][-1] if toks["TOTAL"] else ""
 
     bloco = {
@@ -107,18 +109,19 @@ def create_entrada_block(data, mae_id, texto, re_ent, ctx_ent):
 def add_saida_to_block(data, mae_id, bloco, last_idx, seg, re_sai, ctx_sai):
     aln_sai = calcular_alnulu(seg)
 
-    # tokenização by INSEPA
-    s_units  = re.findall(r'\S+', seg,    re.UNICODE)
-    rs_units = re.findall(r'\S+', re_sai, re.UNICODE)
-    cs_units = re.findall(r'\S+', ctx_sai,re.UNICODE)
+    # tokenização: palavras e cada sequência de pontuação vira um token
+    s_units  = re.findall(r'\w+|[^\w\s]+', seg,     re.UNICODE)
+    rs_units = [re_sai] if re_sai else []             # 1 token único para o emoji/texto
+    cs_units = re.findall(r'\w+|[^\w\s]+', ctx_sai, re.UNICODE)
 
-    raw_toks, _ = generate_tokens(mae_id,
-                                  last_idx + 1,
-                                  len(s_units),
-                                  len(rs_units),
-                                  len(cs_units))
+    raw_toks, _ = generate_tokens(
+        mae_id,
+        last_idx + 1,
+        len(s_units),
+        len(rs_units),
+        len(cs_units)
+    )
 
-    # reclassifica para saída mantendo TOTAL
     toks_s = {
         "S":     raw_toks["E"],
         "RS":    raw_toks["RE"],
@@ -139,7 +142,6 @@ def add_saida_to_block(data, mae_id, bloco, last_idx, seg, re_sai, ctx_sai):
 
 # ————— INSEPA tokenização para Inconsciente —————
 def insepa_tokenizar_texto(text_id, texto):
-    # cada sequência não-branco vira um token
     units  = re.findall(r'\S+', texto, re.UNICODE)
     tokens = [f"{text_id}.{i+1}" for i in range(len(units))]
     alnulu = calcular_alnulu(texto)
@@ -215,8 +217,10 @@ if menu == "Mães":
             sorted(subcon["maes"].keys(), key=int),
             format_func=lambda x: f"{x} - {subcon['maes'][x]['nome']}"
         )
-        novo_nome = st.text_input("Novo nome",
-                                 subcon["maes"][escolha_e]["nome"])
+        novo_nome = st.text_input(
+            "Novo nome",
+            subcon["maes"][escolha_e]["nome"]
+        )
         editar = st.form_submit_button("Atualizar Nome")
     if editar and novo_nome.strip():
         subcon["maes"][escolha_e]["nome"] = novo_nome.strip()
