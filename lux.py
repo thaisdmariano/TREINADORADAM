@@ -451,3 +451,4 @@ elif menu == "Blocos":
 st.sidebar.markdown("---")
 st.sidebar.write("❤️ Desenvolvido com Streamlit")
 
+
