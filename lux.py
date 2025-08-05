@@ -1,11 +1,16 @@
+
 import streamlit as st
 import json
 import os
 import re
 import readline
+from pathlib import Path
 
-SUB_FILE = "adam_memoria.json"
-INC_FILE = "inconsciente.json"
+# garante que jsons são gravados na mesma pasta do script
+BASE_DIR = Path(__file__).parent
+
+SUB_FILE = BASE_DIR / "adam_memoria.json"
+INC_FILE = BASE_DIR / "inconsciente.json"
 
 # ————— Helpers JSON —————
 def load_json(path, default):
@@ -182,7 +187,6 @@ if menu == "Mães":
         save_json(SUB_FILE, subcon)
         st.success(f"Mãe '{nome}' removida")
 
-    # ← MELHORIA: recarrega após atualizar
     with st.form("edit_mae"):
         escolha_e = st.selectbox(
             "Selecionar mãe para editar",
