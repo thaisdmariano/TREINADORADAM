@@ -428,4 +428,3 @@ st.sidebar.markdown("---")
 st.sidebar.write("❤️ Desenvolvido com Streamlit")
 
 
-
