@@ -1,32 +1,41 @@
 import streamlit as st
 import json
-import os
 import re
-import readline
 from pathlib import Path
 
-# garante que jsons são gravados na mesma pasta do script
-BASE_DIR = Path(__file__).parent
+# ────────────────────────────────────────────────────────────────────────────────
+# Caminhos fixos ao lado do script, garantindo o mesmo JSON em qualquer dispositivo
+# ────────────────────────────────────────────────────────────────────────────────
+SCRIPT_DIR = Path(__file__).parent.resolve()
+SUB_FILE   = SCRIPT_DIR / "adam_memoria.json"
+INC_FILE   = SCRIPT_DIR / "inconsciente.json"
 
-SUB_FILE = BASE_DIR / "adam_memoria.json"
-INC_FILE = BASE_DIR / "inconsciente.json"
-
-# ————— Helpers JSON —————
-def load_json(path, default):
-    if os.path.exists(path):
-        with open(path, "r", encoding="utf-8") as f:
-            return json.load(f)
+# ────────────────────────────────────────────────────────────────────────────────
+# Helpers para carregar e salvar JSON
+# ────────────────────────────────────────────────────────────────────────────────
+def load_json(path: Path, default):
+    if path.exists():
+        return json.loads(path.read_text(encoding="utf-8"))
     return default
 
-def save_json(path, data):
-    with open(path, "w", encoding="utf-8") as f:
-        json.dump(data, f, ensure_ascii=False, indent=2)
+def save_json(path: Path, data):
+    path.write_text(
+        json.dumps(data, indent=2, ensure_ascii=False),
+        encoding="utf-8",
+    )
 
+# ────────────────────────────────────────────────────────────────────────────────
+# Funções auxiliares de tokenização e índices
+# ────────────────────────────────────────────────────────────────────────────────
 def reindex_maes(maes_dict):
-    items = sorted(maes_dict.items(), key=lambda x: int(x[0]))
+    items    = sorted(maes_dict.items(), key=lambda x: int(x[0]))
     new_maes = {str(i): m for i, (_, m) in enumerate(items)}
     if not new_maes:
-        new_maes["0"] = {"nome": "Interações", "ultimo_child": "0.0", "blocos": []}
+        new_maes["0"] = {
+            "nome": "Interações",
+            "ultimo_child": "0.0",
+            "blocos": []
+        }
     return new_maes
 
 def segment_text(text):
@@ -58,7 +67,8 @@ def get_last_index(mae):
     last = 0
     for bloco in mae.get("blocos", []):
         for part in ("entrada", "saida"):
-            for tok in bloco.get(part, {}).get("tokens", {}).get("TOTAL", []):
+            toks = bloco.get(part, {}).get("tokens", {}).get("TOTAL", [])
+            for tok in toks:
                 idx = int(tok.split(".")[1])
                 last = max(last, idx)
     return last
@@ -69,21 +79,23 @@ def generate_tokens(mae_id, start, cnt_e, cnt_re, cnt_ce):
     RE    = [fmt(start + cnt_e + i) for i in range(cnt_re)]
     CE    = [fmt(start + cnt_e + cnt_re + i) for i in range(cnt_ce)]
     TOTAL = E + RE + CE
-    last_idx = start + cnt_e + cnt_re + cnt_ce - 1
-    return {"E": E, "RE": RE, "CE": CE, "TOTAL": TOTAL}, last_idx
+    return {"E": E, "RE": RE, "CE": CE, "TOTAL": TOTAL}, start + cnt_e + cnt_re + cnt_ce - 1
 
 def create_entrada_block(data, mae_id, texto, re_ent, ctx_ent):
-    mae     = data["maes"][mae_id]
-    aln_ent = calcular_alnulu(texto)
-    last0   = get_last_index(mae)
+    mae   = data["maes"][mae_id]
+    aln   = calcular_alnulu(texto)
+    last0 = get_last_index(mae)
 
     e_units  = re.findall(r'\w+|[^\w\s]+', texto,   re.UNICODE)
     re_units = [re_ent] if re_ent else []
     ce_units = re.findall(r'\w+|[^\w\s]+', ctx_ent, re.UNICODE)
 
-    toks, _  = generate_tokens(mae_id, last0 + 1, len(e_units), len(re_units), len(ce_units))
-    fim_ent = toks["TOTAL"][-1] if toks["TOTAL"] else ""
-
+    toks, last_idx = generate_tokens(
+        mae_id, last0 + 1,
+        len(e_units),
+        len(re_units),
+        len(ce_units)
+    )
     bloco = {
         "bloco_id": len(mae["blocos"]) + 1,
         "entrada": {
@@ -91,39 +103,40 @@ def create_entrada_block(data, mae_id, texto, re_ent, ctx_ent):
             "reacao":   re_ent,
             "contexto": ctx_ent,
             "tokens":   toks,
-            "fim":      fim_ent,
-            "alnulu":   aln_ent
+            "fim":      toks["TOTAL"][-1] if toks["TOTAL"] else "",
+            "alnulu":   aln
         },
         "saida": {}
     }
-    return bloco, fim_ent
+    return bloco, last_idx
 
 def add_saida_to_block(data, mae_id, bloco, last_idx, seg, re_sai, ctx_sai):
-    aln_sai = calcular_alnulu(seg)
-
+    aln   = calcular_alnulu(seg)
     s_units  = re.findall(r'\w+|[^\w\s]+', seg,     re.UNICODE)
     rs_units = [re_sai] if re_sai else []
     cs_units = re.findall(r'\w+|[^\w\s]+', ctx_sai, re.UNICODE)
 
-    raw_toks, _ = generate_tokens(mae_id, last_idx + 1, len(s_units), len(rs_units), len(cs_units))
-
+    toks_raw, last2 = generate_tokens(
+        mae_id, last_idx + 1,
+        len(s_units),
+        len(rs_units),
+        len(cs_units)
+    )
     toks_s = {
-        "S":     raw_toks["E"],
-        "RS":    raw_toks["RE"],
-        "CS":    raw_toks["CE"],
-        "TOTAL": raw_toks["TOTAL"]
+        "S":     toks_raw["E"],
+        "RS":    toks_raw["RE"],
+        "CS":    toks_raw["CE"],
+        "TOTAL": toks_raw["TOTAL"]
     }
-    fim_sai = toks_s["TOTAL"][-1] if toks_s["TOTAL"] else ""
-
     bloco["saida"] = {
         "texto":    seg,
         "reacao":   re_sai,
         "contexto": ctx_sai,
         "tokens":   toks_s,
-        "fim":      fim_sai,
-        "alnulu":   aln_sai
+        "fim":      toks_s["TOTAL"][-1] if toks_s["TOTAL"] else "",
+        "alnulu":   aln
     }
-    return fim_sai
+    return last2
 
 def insepa_tokenizar_texto(text_id, texto):
     units  = re.findall(r'\w+|[^\w\s]+', texto, re.UNICODE)
@@ -139,39 +152,53 @@ def insepa_tokenizar_texto(text_id, texto):
         "alnulu":       alnulu
     }
 
-# ————— App —————
+# ────────────────────────────────────────────────────────────────────────────────
+# Início do App
+# ────────────────────────────────────────────────────────────────────────────────
 st.set_page_config(page_title="Subconscious Manager")
 st.title("🧠 Subconscious Manager")
 
-subcon = load_json(SUB_FILE, {"maes": {"0": {"nome": "Interações", "ultimo_child": "0.0", "blocos": []}}})
+# Debug: exibe onde os arquivos estão sendo salvos
+st.write("📂 Salvando JSON em:", SUB_FILE, INC_FILE)
+
+# Carrega dados
+subcon = load_json(
+    SUB_FILE,
+    {"maes": {"0": {"nome": "Interações",
+                    "ultimo_child": "0.0",
+                    "blocos": []}}}
+)
 subcon["maes"] = reindex_maes(subcon["maes"])
 inconsc = load_json(INC_FILE, [])
 
-menu = st.sidebar.radio("Navegação", ["Mães", "Inconsciente", "Processar Texto", "Blocos"])
+menu = st.sidebar.radio(
+    "Navegação",
+    ["Mães", "Inconsciente", "Processar Texto", "Blocos"]
+)
 
-# ----------------------------------------
-# Aba Mães
-# ----------------------------------------
+# ────────────────────────────────────────────────────────────────────────────────
+# Aba “Mães”
+# ────────────────────────────────────────────────────────────────────────────────
 if menu == "Mães":
     st.header("Mães Cadastradas")
     for mid in sorted(subcon["maes"].keys(), key=int):
         m = subcon["maes"][mid]
-        st.write(f"ID {mid}: {m['nome']} (ultimo_child={m['ultimo_child']})")
+        st.write(f"ID {mid}: {m['nome']} (último={m['ultimo_child']})")
 
     with st.form("add_mae"):
-        nome   = st.text_input("Nome da nova mãe")
-        submit = st.form_submit_button("Adicionar Mãe")
-    if submit and nome.strip():
-        ids = list(map(int, subcon["maes"].keys()))
-        novo = str(max(ids) + 1)
-        subcon["maes"][novo] = {
+        nome = st.text_input("Nome da nova mãe")
+        ok   = st.form_submit_button("Adicionar Mãe")
+    if ok and nome.strip():
+        new_id = str(max(map(int, subcon["maes"].keys())) + 1)
+        subcon["maes"][new_id] = {
             "nome": nome.strip(),
             "ultimo_child": "0.0",
             "blocos": []
         }
         subcon["maes"] = reindex_maes(subcon["maes"])
         save_json(SUB_FILE, subcon)
-        st.success(f"Mãe '{nome}' adicionada com ID={novo}")
+        st.success(f"Mãe '{nome}' (ID={new_id}) adicionada")
+        st.experimental_rerun()
 
     with st.form("remove_mae"):
         escolha = st.selectbox(
@@ -179,111 +206,117 @@ if menu == "Mães":
             sorted(subcon["maes"].keys(), key=int),
             format_func=lambda x: f"{x} - {subcon['maes'][x]['nome']}"
         )
-        ok = st.form_submit_button("Remover Mãe")
-    if ok:
+        ok2 = st.form_submit_button("Remover Mãe")
+    if ok2:
         nome = subcon["maes"].pop(escolha)["nome"]
         subcon["maes"] = reindex_maes(subcon["maes"])
         save_json(SUB_FILE, subcon)
         st.success(f"Mãe '{nome}' removida")
+        st.experimental_rerun()
 
     with st.form("edit_mae"):
-        escolha_e = st.selectbox(
+        escolha = st.selectbox(
             "Selecionar mãe para editar",
             sorted(subcon["maes"].keys(), key=int),
             format_func=lambda x: f"{x} - {subcon['maes'][x]['nome']}"
         )
-        novo_nome = st.text_input("Novo nome", subcon["maes"][escolha_e]["nome"])
-        if st.form_submit_button("Atualizar Nome"):
-            if novo_nome.strip():
-                subcon["maes"][escolha_e]["nome"] = novo_nome.strip()
-                save_json(SUB_FILE, subcon)
-                st.success(f"Nome da mãe ID {escolha_e} atualizado")
-                st.experimental_rerun()
+        novo_nome = st.text_input(
+            "Novo nome",
+            subcon["maes"][escolha]["nome"]
+        )
+        ok3 = st.form_submit_button("Atualizar Nome")
+    if ok3 and novo_nome.strip():
+        subcon["maes"][escolha]["nome"] = novo_nome.strip()
+        save_json(SUB_FILE, subcon)
+        st.success("Nome atualizado")
+        st.experimental_rerun()
 
-# ----------------------------------------
-# Aba Inconsciente
-# ----------------------------------------
+# ────────────────────────────────────────────────────────────────────────────────
+# Aba “Inconsciente”
+# ────────────────────────────────────────────────────────────────────────────────
 elif menu == "Inconsciente":
     st.header("Inconsciente")
 
+    # converte entradas antigas
     converted = False
-    for idx, entry in enumerate(inconsc):
-        if isinstance(entry, str):
-            inconsc[idx] = insepa_tokenizar_texto(str(idx+1), entry)
+    for i, e in enumerate(inconsc):
+        if isinstance(e, str):
+            inconsc[i] = insepa_tokenizar_texto(str(i+1), e)
             converted = True
     if converted:
         save_json(INC_FILE, inconsc)
 
-    st.subheader("Listar Textos")
+    st.subheader("Textos disponíveis")
     if inconsc:
-        for i, entry in enumerate(inconsc, 1):
-            excerpt = entry["texto"][:100] + ("..." if len(entry["texto"]) > 100 else "")
+        for i, e in enumerate(inconsc, 1):
+            txt = e["texto"]
+            excerpt = txt[:100] + ("..." if len(txt) > 100 else "")
             st.write(f"{i}. {excerpt}")
     else:
-        st.info("Nenhum texto no inconsciente.")
+        st.info("Nenhum texto ainda.")
 
     with st.form("add_texto"):
-        novo      = st.text_area("Inserir novo texto", height=200)
-        txt_files = st.file_uploader(
-            "Ou faça upload de arquivos .txt",
+        novo_txt  = st.text_area("Inserir texto", height=200)
+        uploads   = st.file_uploader(
+            "Ou upload .txt",
             type=["txt"],
             accept_multiple_files=True
         )
-        add = st.form_submit_button("Adicionar Texto")
-    if add:
-        count = 0
-        if txt_files:
-            for file in txt_files:
-                content = file.read().decode("utf-8")
-                entry   = insepa_tokenizar_texto(str(len(inconsc)+1), content)
-                inconsc.append(entry)
-                count += 1
-        elif novo.strip():
-            entry = insepa_tokenizar_texto(str(len(inconsc)+1), novo)
-            inconsc.append(entry)
-            count = 1
-
-        if count:
+        ok_add = st.form_submit_button("Adicionar Texto")
+    if ok_add:
+        cnt = 0
+        if uploads:
+            for f in uploads:
+                content = f.read().decode("utf-8")
+                inconsc.append(
+                    insepa_tokenizar_texto(str(len(inconsc)+1), content)
+                )
+                cnt += 1
+        elif novo_txt.strip():
+            inconsc.append(
+                insepa_tokenizar_texto(str(len(inconsc)+1), novo_txt)
+            )
+            cnt = 1
+        if cnt:
             save_json(INC_FILE, inconsc)
-            st.success(f"{count} texto(s) tokenizado(s) e adicionado(s).")
+            st.success(f"{cnt} texto(s) adicionado(s).")
         else:
             st.warning("Nada para adicionar.")
 
     with st.form("edit_texto"):
         idx      = st.number_input(
-            "ID do texto a editar",
+            "ID do texto",
             min_value=1,
             max_value=len(inconsc),
             value=1
         )
-        old      = inconsc[idx-1]["texto"]
-        upd      = st.text_area("Novo conteúdo", old, height=200)
-        edit_btn = st.form_submit_button("Editar Texto")
-    if edit_btn:
-        inconsc[idx-1] = insepa_tokenizar_texto(str(idx), upd)
+        updated  = st.text_area("Novo conteúdo",
+                                inconsc[idx-1]["texto"],
+                                height=200)
+        ok_edit = st.form_submit_button("Editar Texto")
+    if ok_edit:
+        inconsc[idx-1] = insepa_tokenizar_texto(str(idx), updated)
         save_json(INC_FILE, inconsc)
-        st.success(f"Texto #{idx} re-tokenizado e atualizado")
+        st.success(f"Texto #{idx} atualizado.")
 
     with st.form("remove_texto"):
-        rid     = st.number_input(
-            "ID do texto a remover",
+        rid      = st.number_input(
+            "Remover ID",
             min_value=1,
             max_value=len(inconsc),
             value=1
         )
-        rem_btn = st.form_submit_button("Remover Texto")
-    if rem_btn:
+        ok_rem = st.form_submit_button("Remover Texto")
+    if ok_rem:
         removed = inconsc.pop(rid-1)
         for i, e in enumerate(inconsc, 1):
             inconsc[i-1] = insepa_tokenizar_texto(str(i), e["texto"])
         save_json(INC_FILE, inconsc)
-        st.success(f"Texto removido: {removed['nome']}")
-    if not inconsc:
-        st.info("Sem textos para editar ou remover nesta seção.")
+        st.success(f"Removido: {removed['nome']}")
 
-# ----------------------------------------
-# Aba Processar Texto
-# ----------------------------------------
+# ────────────────────────────────────────────────────────────────────────────────
+# Aba “Processar Texto”
+# ────────────────────────────────────────────────────────────────────────────────
 elif menu == "Processar Texto":
     st.header("Processar Texto")
 
@@ -294,79 +327,90 @@ elif menu == "Processar Texto":
         format_func=lambda x: f"{x} - {subcon['maes'][x]['nome']}"
     )
 
-    opt = ["Último salvo"] + [
-        f"{i+1}. {t['texto'][:30]}{'...' if len(t['texto']) > 30 else ''}"
+    opts = ["Último salvo"] + [
+        f"{i+1}. {t['texto'][:30]}{'...' if len(t['texto'])>30 else ''}"
         for i, t in enumerate(inconsc)
     ]
-    escolha = st.selectbox("Selecione texto", opt)
+    escolha = st.selectbox("Escolha texto", opts)
+
     if escolha == "Último salvo" and inconsc:
         texto = inconsc[-1]["texto"]
-    elif not escolha.startswith("Último"):
-        texto = inconsc[int(escolha.split(".")[0]) - 1]["texto"]
+    elif escolha != "Último salvo":
+        idx   = int(escolha.split(".")[0]) - 1
+        texto = inconsc[idx]["texto"]
     else:
-        texto = st.text_area("Digite texto para processar", "")
+        texto = st.text_area("Digite texto", "")
 
     if st.button("Segmentar"):
-        st.session_state["sugestoes"]  = segment_text(texto)
-        st.session_state["texto_base"] = texto
-        st.session_state["mae_id"]     = mae_id
+        st.session_state.sugestoes  = segment_text(texto)
+        st.session_state.texto_base = texto
+        st.session_state.mae_id     = mae_id
 
     if "sugestoes" in st.session_state:
-        for idx, seg in enumerate(st.session_state["sugestoes"], 1):
+        for idx, seg in enumerate(st.session_state.sugestoes, 1):
             st.subheader(f"Trecho {idx}")
             st.write(seg)
-
-            action = st.radio("Ação", ["Ignorar", "Entrada", "Saída"], key=f"act{idx}")
-
+            action = st.radio(
+                "Ação", ["Ignorar", "Entrada", "Saída"],
+                key=f"act{idx}"
+            )
             if action == "Entrada":
-                seg2    = st.text_input("Texto (entrada)", seg, key=f"inp_ent{idx}")
-                re_ent  = st.text_input("Reação (entrada)", "",    key=f"reac_ent{idx}")
-                ctx_ent = st.text_input("Contexto (entrada)", "",  key=f"ctx_ent{idx}")
+                ent_txt = st.text_input(
+                    "Entrada", seg, key=f"ent{idx}"
+                )
+                re_ent  = st.text_input(
+                    "Reação", key=f"reac_ent{idx}"
+                )
+                ctx_ent = st.text_input(
+                    "Contexto", key=f"ctx_ent{idx}"
+                )
                 if st.button("Salvar Entrada", key=f"save_ent{idx}"):
-                    bloco, ultimo = create_entrada_block(
+                    bloco, last = create_entrada_block(
                         subcon,
-                        st.session_state["mae_id"],
-                        seg2,
-                        re_ent,
-                        ctx_ent
+                        st.session_state.mae_id,
+                        ent_txt, re_ent, ctx_ent
                     )
                     subcon["maes"][mae_id]["blocos"].append(bloco)
-                    subcon["maes"][mae_id]["ultimo_child"] = ultimo
+                    subcon["maes"][mae_id]["ultimo_child"] = last
                     save_json(SUB_FILE, subcon)
-                    st.success(f"Entrada do bloco #{bloco['bloco_id']} salva")
-
+                    st.success(f"Bloco #{bloco['bloco_id']} criado")
             elif action == "Saída":
-                seg2    = st.text_input("Texto (saída)", seg,     key=f"inp_sai{idx}")
-                re_sai  = st.text_input("Reação (saída)", "",     key=f"reac_sai{idx}")
-                ctx_sai = st.text_input("Contexto (saída)", "",   key=f"ctx_sai{idx}")
-
-                blocos    = subcon["maes"][mae_id]["blocos"]
-                pendentes = [b["bloco_id"] for b in blocos if not b["saida"]]
-                if pendentes:
-                    alvo = st.selectbox("Bloco para completar (saída)", pendentes, key=f"target{idx}")
+                sai_txt = st.text_input(
+                    "Saída", seg, key=f"sai{idx}"
+                )
+                re_sai  = st.text_input(
+                    "Reação", key=f"reac_sai{idx}"
+                )
+                ctx_sai = st.text_input(
+                    "Contexto", key=f"ctx_sai{idx}"
+                )
+                blocos   = subcon["maes"][mae_id]["blocos"]
+                pend     = [b["bloco_id"] for b in blocos if not b["saida"]]
+                if pend:
+                    alvo = st.selectbox(
+                        "Completar bloco", pend, key=f"target{idx}"
+                    )
                     if st.button("Salvar Saída", key=f"save_sai{idx}"):
-                        bloco_obj = next(b for b in blocos if b["bloco_id"] == alvo)
-                        last_idx  = get_last_index(subcon["maes"][mae_id])
-                        ultimo    = add_saida_to_block(
-                            subcon, mae_id, bloco_obj, last_idx,
-                            seg2, re_sai, ctx_sai
+                        bobj   = next(b for b in blocos if b["bloco_id"] == alvo)
+                        last0  = get_last_index(subcon["maes"][mae_id])
+                        newidx = add_saida_to_block(
+                            subcon, mae_id, bobj,
+                            last0, sai_txt, re_sai, ctx_sai
                         )
-                        subcon["maes"][mae_id]["ultimo_child"] = ultimo
+                        subcon["maes"][mae_id]["ultimo_child"] = newidx
                         save_json(SUB_FILE, subcon)
                         st.success(f"Saída adicionada ao bloco #{alvo}")
                 else:
-                    st.warning("Não há blocos pendentes de saída.")
+                    st.warning("Sem bloco pendente de saída.")
 
-# ----------------------------------------
-# Aba Blocos
-# ----------------------------------------
+# ────────────────────────────────────────────────────────────────────────────────
+# Aba “Blocos”
+# ────────────────────────────────────────────────────────────────────────────────
 elif menu == "Blocos":
     st.header("Gerenciar Blocos")
-
     mae_ids = sorted(subcon["maes"].keys(), key=int)
     mae_id  = st.selectbox(
-        "Escolha mãe",
-        mae_ids,
+        "Escolha mãe", mae_ids,
         format_func=lambda x: f"{x} - {subcon['maes'][x]['nome']}"
     )
     blocos = subcon["maes"][mae_id]["blocos"]
@@ -375,58 +419,50 @@ elif menu == "Blocos":
         st.info("Nenhum bloco cadastrado.")
     else:
         for b in blocos:
-            st.write(
-                f"#{b['bloco_id']} → ENTRADA: {b['entrada']['texto']} | SAÍDA: {b['saida'].get('texto','')}"
-            )
+            sa = b["saida"].get("texto", "")
+            st.write(f"#{b['bloco_id']} → ENTRADA: {b['entrada']['texto']} | SAÍDA: {sa}")
 
-        bid   = st.number_input(
-            "ID do bloco para editar",
-            min_value=1,
-            max_value=len(blocos),
-            value=1
-        )
+        bid   = st.number_input("ID do bloco", 1, len(blocos), 1)
         campo = st.radio(
             "Campo",
-            ["entrada.texto", "entrada.reacao", "entrada.contexto", "saida.texto"],
-            index=0
+            ["entrada.texto", "entrada.reacao", "entrada.contexto", "saida.texto"]
         )
         novo  = st.text_input("Novo valor")
-        if st.button("Atualizar Bloco"):
+        if st.button("Atualizar"):
             part, key = campo.split(".")
             subcon["maes"][mae_id]["blocos"][bid-1][part][key] = novo
             save_json(SUB_FILE, subcon)
             st.success("Bloco atualizado")
+            st.experimental_rerun()
 
-        rem = st.number_input(
-            "ID do bloco para remover",
-            min_value=1,
-            max_value=len(blocos),
-            value=1,
-            key="rem"
-        )
-        if st.button("Remover Bloco"):
+        rem = st.number_input("Remover ID", 1, len(blocos), 1, key="rem2")
+        if st.button("Remover"):
             subcon["maes"][mae_id]["blocos"].pop(rem-1)
-            for i, b in enumerate(subcon["maes"][mae_id]["blocos"], 1):
-                b["bloco_id"] = i
+            for i, bb in enumerate(subcon["maes"][mae_id]["blocos"], 1):
+                bb["bloco_id"] = i
             save_json(SUB_FILE, subcon)
             st.success(f"Bloco #{rem} removido")
+            st.experimental_rerun()
 
-        seq = st.text_input("Intervalo p/ remover (ex: 2-5)")
-        if st.button("Remover Sequência"):
+        seq = st.text_input("Intervalo (ex:2-5)")
+        if st.button("Remover Seq"):
             m = re.match(r"(\d+)-(\d+)", seq)
             if m:
                 start, end = map(int, m.groups())
                 subcon["maes"][mae_id]["blocos"] = [
-                    b for b in subcon["maes"][mae_id]["blocos"]
-                    if not (start <= b["bloco_id"] <= end)
+                    bb for bb in subcon["maes"][mae_id]["blocos"]
+                    if not (start <= bb["bloco_id"] <= end)
                 ]
-                for i, b in enumerate(subcon["maes"][mae_id]["blocos"], 1):
-                    b["bloco_id"] = i
+                for i, bb in enumerate(subcon["maes"][mae_id]["blocos"], 1):
+                    bb["bloco_id"] = i
                 save_json(SUB_FILE, subcon)
-                st.success(f"Blocos {start} a {end} removidos")
+                st.success(f"Blocos {start}-{end} removidos")
+                st.experimental_rerun()
             else:
-                st.error("Formato inválido")
+                st.error("Intervalo inválido")
 
+# Rodapé
 st.sidebar.markdown("---")
 st.sidebar.write("❤️ Desenvolvido com Streamlit")
+
 
