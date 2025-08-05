@@ -5,11 +5,9 @@ import re
 import readline
 from pathlib import Path
 
-# garante que jsons são gravados na mesma pasta do script
-BASE_DIR = Path(__file__).parent
-
-SUB_FILE = BASE_DIR / "adam_memoria.json"
-INC_FILE = BASE_DIR / "inconsciente.json"
+# garante que jsons são gravados no diretório de execução do Streamlit
+SUB_FILE = Path.cwd() / "adam_memoria.json"
+INC_FILE = Path.cwd() / "inconsciente.json"
 
 # ————— Helpers JSON —————
 def load_json(path, default):
@@ -106,7 +104,6 @@ def add_saida_to_block(data, mae_id, bloco, last_idx, seg, re_sai, ctx_sai):
     cs_units = re.findall(r'\w+|[^\w\s]+', ctx_sai, re.UNICODE)
 
     raw_toks, _ = generate_tokens(mae_id, last_idx + 1, len(s_units), len(rs_units), len(cs_units))
-
     toks_s = {
         "S":     raw_toks["E"],
         "RS":    raw_toks["RE"],
@@ -429,4 +426,5 @@ elif menu == "Blocos":
 
 st.sidebar.markdown("---")
 st.sidebar.write("❤️ Desenvolvido com Streamlit")
+
 
