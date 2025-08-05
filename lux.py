@@ -1,13 +1,17 @@
+
 import streamlit as st
 import json
+import io
 import os
 import re
 import readline
 from pathlib import Path
 
-# garante que jsons são gravados no diretório de execução do Streamlit
-SUB_FILE = Path.cwd() / "adam_memoria.json"
-INC_FILE = Path.cwd() / "inconsciente.json"
+# garante que jsons são gravados na mesma pasta do script
+BASE_DIR = Path(__file__).parent
+
+SUB_FILE = BASE_DIR / "adam_memoria.json"
+INC_FILE = BASE_DIR / "inconsciente.json"
 
 # ————— Helpers JSON —————
 def load_json(path, default):
@@ -104,6 +108,7 @@ def add_saida_to_block(data, mae_id, bloco, last_idx, seg, re_sai, ctx_sai):
     cs_units = re.findall(r'\w+|[^\w\s]+', ctx_sai, re.UNICODE)
 
     raw_toks, _ = generate_tokens(mae_id, last_idx + 1, len(s_units), len(rs_units), len(cs_units))
+
     toks_s = {
         "S":     raw_toks["E"],
         "RS":    raw_toks["RE"],
@@ -147,7 +152,7 @@ inconsc = load_json(INC_FILE, [])
 menu = st.sidebar.radio("Navegação", ["Mães", "Inconsciente", "Processar Texto", "Blocos"])
 
 # ----------------------------------------
-# Aba Mães
+# Aba Mães raiz do INSEPA
 # ----------------------------------------
 if menu == "Mães":
     st.header("Mães Cadastradas")
@@ -279,7 +284,7 @@ elif menu == "Inconsciente":
         st.info("Sem textos para editar ou remover nesta seção.")
 
 # ----------------------------------------
-# Aba Processar Texto
+# Aba Processar Texto via Text Insepa
 # ----------------------------------------
 elif menu == "Processar Texto":
     st.header("Processar Texto")
@@ -355,7 +360,7 @@ elif menu == "Processar Texto":
                     st.warning("Não há blocos pendentes de saída.")
 
 # ----------------------------------------
-# Aba Blocos
+# Aba Blocos INSEPA
 # ----------------------------------------
 elif menu == "Blocos":
     st.header("Gerenciar Blocos")
@@ -424,7 +429,29 @@ elif menu == "Blocos":
             else:
                 st.error("Formato inválido")
 
+# ————— Botões de Download de JSON —————
 st.sidebar.markdown("---")
-st.sidebar.write("❤️ Desenvolvido com Streamlit")
+st.sidebar.subheader("📥 Exportar Memórias JSON")
 
+json_bytes = io.BytesIO(
+    json.dumps(subcon, ensure_ascii=False, indent=2).encode("utf-8")
+)
+st.sidebar.download_button(
+    label="🔽 Baixar adam_memoria.json",
+    data=json_bytes,
+    file_name="adam_memoria.json",
+    mime="application/json"
+)
 
+json2_bytes = io.BytesIO(
+    json.dumps(inconsc, ensure_ascii=False, indent=2).encode("utf-8")
+)
+st.sidebar.download_button(
+    label="🔽 Baixar inconsciente.json",
+    data=json2_bytes,
+    file_name="inconsciente.json",
+    mime="application/json"
+)
+
+st.sidebar.markdown("---")
+st.sidebar.write("❤️ Desenvolvido por LuxBurnns & CIA")
