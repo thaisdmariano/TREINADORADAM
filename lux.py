@@ -11,7 +11,7 @@ BASE_DIR = Path(__file__).parent
 SUB_FILE = BASE_DIR / "adam_memoria.json"
 INC_FILE = BASE_DIR / "inconsciente.json"
 
-# ————— Helpers JSON —————
+# ————— Helpers JSON by INSEPA LUX—————
 def load_json(path, default):
     if os.path.exists(path):
         with open(path, "r", encoding="utf-8") as f:
@@ -151,7 +151,7 @@ inconsc = load_json(INC_FILE, [])
 menu = st.sidebar.radio("Navegação", ["Mães", "Inconsciente", "Processar Texto", "Blocos"])
 
 # ----------------------------------------
-# Aba Mães
+# Aba Mães no modelo INSEPA
 # ----------------------------------------
 if menu == "Mães":
     st.header("Mães Cadastradas")
@@ -202,7 +202,7 @@ if menu == "Mães":
                 st.experimental_rerun()
 
 # ----------------------------------------
-# Aba Inconsciente
+# Aba Inconsciente estilo INSEPA
 # ----------------------------------------
 elif menu == "Inconsciente":
     st.header("Inconsciente")
@@ -283,7 +283,7 @@ elif menu == "Inconsciente":
         st.info("Sem textos para editar ou remover nesta seção.")
 
 # ----------------------------------------
-# Aba Processar Texto
+# Aba Processar Texto by INSEPA
 # ----------------------------------------
 elif menu == "Processar Texto":
     st.header("Processar Texto")
@@ -359,7 +359,7 @@ elif menu == "Processar Texto":
                     st.warning("Não há blocos pendentes de saída.")
 
 # ----------------------------------------
-# Aba Blocos
+# Aba Blocos do modelo INSEPA
 # ----------------------------------------
 elif menu == "Blocos":
     st.header("Gerenciar Blocos")
@@ -442,5 +442,6 @@ st.sidebar.download_button(
     file_name="inconsciente.json",
     mime="application/json"
 )
-st.sidebar.write("❤️ Desenvolvido com Streamlit")
+st.sidebar.write("❤️ Desenvolvido por Lux & cia")
+
 
