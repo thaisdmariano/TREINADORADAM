@@ -1,7 +1,5 @@
-
 import streamlit as st
 import json
-import io
 import os
 import re
 import readline
@@ -145,6 +143,7 @@ def insepa_tokenizar_texto(text_id, texto):
 st.set_page_config(page_title="Subconscious Manager")
 st.title("🧠 Subconscious Manager")
 
+# Carrega dados existentes ou inicializa
 subcon = load_json(SUB_FILE, {"maes": {"0": {"nome": "Interações", "ultimo_child": "0.0", "blocos": []}}})
 subcon["maes"] = reindex_maes(subcon["maes"])
 inconsc = load_json(INC_FILE, [])
@@ -152,7 +151,7 @@ inconsc = load_json(INC_FILE, [])
 menu = st.sidebar.radio("Navegação", ["Mães", "Inconsciente", "Processar Texto", "Blocos"])
 
 # ----------------------------------------
-# Aba Mães raiz do INSEPA
+# Aba Mães
 # ----------------------------------------
 if menu == "Mães":
     st.header("Mães Cadastradas")
@@ -284,7 +283,7 @@ elif menu == "Inconsciente":
         st.info("Sem textos para editar ou remover nesta seção.")
 
 # ----------------------------------------
-# Aba Processar Texto via Text Insepa
+# Aba Processar Texto
 # ----------------------------------------
 elif menu == "Processar Texto":
     st.header("Processar Texto")
@@ -360,7 +359,7 @@ elif menu == "Processar Texto":
                     st.warning("Não há blocos pendentes de saída.")
 
 # ----------------------------------------
-# Aba Blocos INSEPA
+# Aba Blocos
 # ----------------------------------------
 elif menu == "Blocos":
     st.header("Gerenciar Blocos")
@@ -429,29 +428,19 @@ elif menu == "Blocos":
             else:
                 st.error("Formato inválido")
 
-# ————— Botões de Download de JSON —————
+# — download JSONs e créditos —
 st.sidebar.markdown("---")
-st.sidebar.subheader("📥 Exportar Memórias JSON")
-
-json_bytes = io.BytesIO(
-    json.dumps(subcon, ensure_ascii=False, indent=2).encode("utf-8")
-)
 st.sidebar.download_button(
-    label="🔽 Baixar adam_memoria.json",
-    data=json_bytes,
+    "📥 Download Subconsciente (JSON)",
+    data=json.dumps(subcon, ensure_ascii=False, indent=2),
     file_name="adam_memoria.json",
     mime="application/json"
 )
-
-json2_bytes = io.BytesIO(
-    json.dumps(inconsc, ensure_ascii=False, indent=2).encode("utf-8")
-)
 st.sidebar.download_button(
-    label="🔽 Baixar inconsciente.json",
-    data=json2_bytes,
+    "📥 Download Inconsciente (JSON)",
+    data=json.dumps(inconsc, ensure_ascii=False, indent=2),
     file_name="inconsciente.json",
     mime="application/json"
 )
+st.sidebar.write("❤️ Desenvolvido com Streamlit")
 
-st.sidebar.markdown("---")
-st.sidebar.write("❤️ Desenvolvido por LuxBurnns & CIA")
