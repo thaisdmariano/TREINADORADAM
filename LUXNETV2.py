@@ -1,3 +1,6 @@
+# -*- coding: utf-8 -*-
+# Adam – CLI Multiversal com Estética Cósmica 🌌
+
 import os
 import json
 import re
@@ -10,7 +13,25 @@ ARQUIVO_MEMORIA = "adam_memoria.json"
 CKPT            = "insepa_xy.pt"
 
 # ────────────────────────────────────────────────────────────────────────────────
-# Utilitários
+# Mensagens e prompts cósmicos
+# ────────────────────────────────────────────────────────────────────────────────
+def mensagem_cosmica():
+    print("❌ Não encontrei correspondências com este universo. Tente outro!")
+    print()
+    print("Por hoje é só.")
+    print("✨ Mas não desanime: como o cosmos, estamos sempre em expansão!")
+    print()
+
+def entrada_usuario(modo="default"):
+    if modo == "inicial":
+        return input("👤 Digite sua mensagem com emoji:\n ")
+    elif modo == "playlist":
+        return input("Digite Enter ou uma Nova Mensagem com emoji ")
+    else:
+        return input("💬 Digite sua mensagem e emoji\n↳ ")
+
+# ────────────────────────────────────────────────────────────────────────────────
+# Utilitários de tokenização e parsing
 # ────────────────────────────────────────────────────────────────────────────────
 def garantir_pontuacao(txt: str) -> str:
     txt = txt.strip()
@@ -20,10 +41,6 @@ def tokenizar(txt: str) -> list[str]:
     return re.findall(r"\w+|[^\w\s]", txt, re.UNICODE)
 
 def parse_text_reaction(raw: str, blocos: list[dict]) -> tuple[str, str]:
-    """
-    Separa texto e reação EXATAMENTE como estão no JSON.
-    Tenta cada reação cadastrada (ordem decrescente de tamanho).
-    """
     s = raw.strip()
     reactions = sorted(
         {b["entrada"]["reacao"] for b in blocos if b.get("entrada", {}).get("reacao")},
@@ -36,9 +53,6 @@ def parse_text_reaction(raw: str, blocos: list[dict]) -> tuple[str, str]:
     return garantir_pontuacao(s), ""
 
 def _saida_tokens_legacy_or_insepa(saida: dict) -> tuple[list[str], list[str], list[str]]:
-    """
-    Compat: legado (E/RE/CE) e atual (S/RS/CS). Retorna sempre (S, RS, CS).
-    """
     t = saida.get("tokens", {})
     if "S" in t or "RS" in t or "CS" in t:
         S  = t.get("S", [])
@@ -51,11 +65,6 @@ def _saida_tokens_legacy_or_insepa(saida: dict) -> tuple[list[str], list[str], l
     return S, RS, CS
 
 def xy_from_block_many(b: dict) -> list[tuple[list[float], list[float]]]:
-    """
-    Gera múltiplos pares (X, Y) por bloco (uma amostra por saída).
-    X = E_in + RE_in + CE_in
-    Y = S_out + RS_out + CS_out
-    """
     Ein  = [float(v) for v in b["entrada"]["tokens"].get("E", [])]
     REin = [float(v) for v in b["entrada"]["tokens"].get("RE", [])]
     CEin = [float(v) for v in b["entrada"]["tokens"].get("CE", [])]
@@ -77,7 +86,6 @@ def xy_from_block_many(b: dict) -> list[tuple[list[float], list[float]]]:
 # Dataset e modelo
 # ────────────────────────────────────────────────────────────────────────────────
 class InsepaXY(Dataset):
-    """Pares (X, Y) com padding automático, cobrindo todas as saídas dos blocos."""
     def __init__(self, memoria: dict, dominio: str):
         blocos = memoria["maes"][dominio]["blocos"]
         self.pares = []
@@ -98,7 +106,6 @@ class InsepaXY(Dataset):
         return torch.tensor(x_pad, dtype=torch.float32), torch.tensor(y_pad, dtype=torch.float32)
 
 class InsepaReg(nn.Module):
-    """MLP simples X→Y."""
     def __init__(self, xin: int, yout: int, hidden: int = 32):
         super().__init__()
         self.net = nn.Sequential(
@@ -140,7 +147,7 @@ def train(memoria: dict, dominio: str) -> None:
     print(f"✅ Treino concluído. Checkpoint salvo em '{CKPT}'\n")
 
 # ────────────────────────────────────────────────────────────────────────────────
-# Inferência (playlist por Enter, fim “sem ideias”)
+# Inferência (playlist interativa com escadinha de blocos)
 # ────────────────────────────────────────────────────────────────────────────────
 def _montar_X_do_bloco(b: dict) -> list[float]:
     Ein  = [float(v) for v in b["entrada"]["tokens"].get("E", [])]
@@ -151,6 +158,36 @@ def _montar_X_do_bloco(b: dict) -> list[float]:
 def _montar_Y_da_saida(saida: dict) -> list[float]:
     S, RS, CS = _saida_tokens_legacy_or_insepa(saida)
     return [float(v) for v in (S + RS + CS)]
+
+def _escolher_saida_por_modelo(model, max_x, max_y, bloco) -> dict:
+    X = _montar_X_do_bloco(bloco)
+    X_pad = X + [0.0] * (max_x - len(X))
+    with torch.no_grad():
+        y_hat = model(torch.tensor([X_pad], dtype=torch.float32))[0].numpy()
+
+    saidas = bloco.get("saidas") or ([bloco["saida"]] if "saida" in bloco else [])
+    if not saidas:
+        return None
+
+    melhor, best_idx = float("inf"), None
+    for i, s in enumerate(saidas):
+        Y = _montar_Y_da_saida(s)
+        Y_pad = Y + [0.0] * (max_y - len(Y))
+        dist = sum((float(yh) - float(yr)) ** 2 for yh, yr in zip(y_hat, Y_pad))
+        if dist < melhor:
+            melhor, best_idx = dist, i
+    return saidas[best_idx]
+
+def _variacoes_da_saida(saida: dict) -> list[str]:
+    if "textos" in saida and saida["textos"]:
+        variacoes = saida["textos"][:]
+    elif "texto" in saida:
+        variacoes = [saida["texto"]]
+    else:
+        variacoes = ["[Sem texto registrado nesta saída]"]
+    if saida.get("reacao"):
+        variacoes = [f"{v} {saida['reacao']}" for v in variacoes]
+    return variacoes
 
 def infer(memoria: dict, dominio: str) -> None:
     if not os.path.exists(CKPT):
@@ -167,64 +204,52 @@ def infer(memoria: dict, dominio: str) -> None:
     model.load_state_dict(state)
     model.eval()
 
-    raw = input("👤 Entrada + Reação: ")
+    raw = entrada_usuario("inicial")
     txt, rea = parse_text_reaction(raw, blocos)
 
-    # 1) Localiza bloco (texto + reação)
-    bloco_match = None
-    for b in blocos:
-        ent = b.get("entrada", {})
-        if txt == ent.get("texto") and rea == ent.get("reacao", ""):
-            bloco_match = b
+    bloco_atual = next(
+        (b for b in blocos
+         if b.get("entrada", {}).get("texto") == txt
+         and b.get("entrada", {}).get("reacao", "") == rea),
+        None
+    )
+    if bloco_atual is None:
+        mensagem_cosmica()
+        return
+
+    while True:
+        saida_escolhida = _escolher_saida_por_modelo(model, max_x, max_y, bloco_atual)
+        if not saida_escolhida:
+            print("⚠️ Não há interação disponível.")
+            return
+
+        variacoes = _variacoes_da_saida(saida_escolhida)
+        idx = 0
+
+        while True:
+            if idx < len(variacoes):
+                print(f"\n🤖 {variacoes[idx]}")
+                idx += 1
+            else:
+                mensagem_cosmica()
+                break
+
+            entrada = entrada_usuario("playlist")
+            if entrada.strip():
+                novo_txt, novo_rea = parse_text_reaction(entrada, blocos)
+                bloco_novo = next(
+                    (b for b in blocos
+                     if b.get("entrada", {}).get("texto") == novo_txt
+                     and b.get("entrada", {}).get("reacao", "") == novo_rea),
+                    None
+                )
+                if bloco_novo:
+                    bloco_atual = bloco_novo
+                    break
+                else:
+                    mensagem_cosmica()
+        if idx >= len(variacoes) and not entrada.strip():
             break
-    if bloco_match is None:
-        print("❌ Entrada+reação não cadastrada neste domínio.")
-        return
-
-    # 2) Infere Y e escolhe saída mais próxima dentro do bloco
-    X = _montar_X_do_bloco(bloco_match)
-    X_pad = X + [0.0] * (max_x - len(X))
-    with torch.no_grad():
-        y_hat = model(torch.tensor([X_pad], dtype=torch.float32))[0].numpy()
-
-    if "saidas" in bloco_match and bloco_match["saidas"]:
-        saidas = bloco_match["saidas"]
-    elif "saida" in bloco_match and bloco_match["saida"]:
-        saidas = [bloco_match["saida"]]
-    else:
-        print("⚠️ Bloco não possui saídas cadastradas.")
-        return
-
-    melhor, best_idx = float("inf"), None
-    for i, s in enumerate(saidas):
-        Y = _montar_Y_da_saida(s)
-        Y_pad = Y + [0.0] * (max_y - len(Y))
-        dist = sum((float(yh) - float(yr)) ** 2 for yh, yr in zip(y_hat, Y_pad))
-        if dist < melhor:
-            melhor, best_idx = dist, i
-    saida_escolhida = saidas[best_idx]
-
-    # 3) Prepara variações de texto dessa saída
-    if "textos" in saida_escolhida and saida_escolhida["textos"]:
-        variacoes = saida_escolhida["textos"][:]
-    elif "texto" in saida_escolhida:
-        variacoes = [saida_escolhida["texto"]]
-    else:
-        variacoes = ["[Sem texto registrado nesta saída]"]
-
-    # Emoção incorporada no fim (sem exibir rótulos)
-    if saida_escolhida.get("reacao"):
-        variacoes = [f"{v} {saida_escolhida['reacao']}" for v in variacoes]
-
-    # 4) Playlist: uma resposta por Enter
-    idx = 0
-    while idx < len(variacoes):
-        print(f"\n🤖 {variacoes[idx]}")
-        idx += 1
-        if idx < len(variacoes):
-            _ = input("(Enter para próxima variação) ")
-
-    print("\nHm pelo visto fiquei sem ideias")
 
 # ────────────────────────────────────────────────────────────────────────────────
 # CLI
